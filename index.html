@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech to Sign - V1</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 30px; text-align: center; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 5px; margin-bottom: 20px; }
+        .box { margin: 10px auto; max-width: 600px; padding: 15px; border-radius: 5px; text-align: left; }
+        #filtered-output { border: 2px solid #28a745; background: #e9f7ef; font-size: 20px; font-weight: bold; color: #155724; }
+        .stage { position: relative; width: 600px; height: 350px; margin: 20px auto; border: 4px solid #333; border-radius: 10px; background: #000; overflow: hidden; }
+        video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.1s; }
+        video.active { opacity: 1; z-index: 10; }
+        .stage:fullscreen { width: 100vw; height: 100vh; border: none; margin: 0; border-radius: 0; background: #000; }
+    </style>
+</head>
+<body>
+
+    <h1>Step 8: V1 Classroom Ready</h1>
+    <button id="start-btn">Start Listening</button>
+    <button id="projector-btn" style="background: #28a745;">Enter Student View</button>
+    
+    <div class="box" id="filtered-output"><strong>Detected Words:</strong> <span>...</span></div>
+    
+    <div class="stage">
+        <video id="player-1" muted playsinline></video>
+        <video id="player-2" muted playsinline></video>
+    </div>
+
+    <script>
+        // --- 1. THE DICTIONARY & DATA ---
+        const stopWords = ['hai', 'tha', 'ki', 'ke', 'aur', 'mein', 'se', 'ko', 'hi', 'aaj', 'humara', 'ka', 'ek', 'ho', 'raha', 'the', 'is', 'a', 'an', 'है', 'था', 'की', 'के', 'और', 'में', 'से', 'को', 'आज', 'हमारा', 'का', 'एक'];
+
+        const signDictionary = {
+            "class": "./videos/class.mp4", "lecture": "./videos/class.mp4", "period": "./videos/class.mp4",
+            "notes": "./videos/notes.mp4", "pdf": "./videos/pdf.mp4", "document": "./videos/pdf.mp4",
+            "board": "./videos/board.mp4", "screen": "./videos/board.mp4",
+            "read": "./videos/read.mp4", "reading": "./videos/read.mp4", "padho": "./videos/read.mp4",
+            "write": "./videos/write.mp4", "writing": "./videos/write.mp4", "likho": "./videos/write.mp4",
+            "sum": "./videos/solve.mp4", "numericals": "./videos/solve.mp4", "solve": "./videos/solve.mp4",
+            "attention": "./videos/attention.mp4", "focus": "./videos/attention.mp4", "dhyan": "./videos/attention.mp4",
+            "exam": "./videos/exam.mp4", "pariksha": "./videos/exam.mp4", "test": "./videos/exam.mp4", "quiz": "./videos/exam.mp4",
+            "एग्जाम": "./videos/exam.mp4", "परीक्षा": "./videos/exam.mp4"
+        };
+
+        const hindiToEnglishMap = {
+            'अ':'a', 'आ':'aa', 'इ':'i', 'ई':'ee', 'उ':'u', 'ऊ':'oo', 'ए':'e', 'ऐ':'ai', 'ओ':'o', 'औ':'au',
+            'क':'k', 'ख':'kh', 'ग':'g', 'घ':'gh', 'च':'ch', 'छ':'chh', 'ज':'j', 'झ':'jh', 'ट':'t', 'ठ':'th',
+            'ड':'d', 'ढ':'dh', 'त':'t', 'थ':'th', 'द':'d', 'ध':'dh', 'न':'n', 'प':'p', 'फ':'f', 'ब':'b',
+            'भ':'bh', 'म':'m', 'य':'y', 'र':'r', 'ल':'l', 'व':'v', 'श':'sh', 'ष':'sh', 'स':'s', 'ह':'h',
+            'ा':'a', 'ि':'i', 'ी':'ee', 'ु':'u', 'ू':'oo', 'े':'e', 'ै':'ai', 'ो':'o', 'ौ':'au', 'ं':'n', '्':''
+        };
+
+        function transliterateHindi(word) {
+            let romanized = "";
+            for (let char of word) {
+                if (hindiToEnglishMap[char]) { romanized += hindiToEnglishMap[char]; } 
+                else if (char.match(/[a-z]/i)) { romanized += char; }
+            }
+            return romanized.toLowerCase();
+        }
+
+        // --- 2. THE VIDEO PLAYER LOGIC ---
+        const startBtn = document.getElementById('start-btn');
+        const filteredOutput = document.querySelector('#filtered-output span');
+        const player1 = document.getElementById('player-1');
+        const player2 = document.getElementById('player-2');
+        let activePlayer = 1; 
+        let videoQueue = [];
+        let isPlaying = false;
+
+        function playNextVideo() {
+            if (videoQueue.length === 0) {
+                isPlaying = false;
+                player1.classList.remove('active');
+                player2.classList.remove('active');
+                player1.playbackRate = 1.0;
+                player2.playbackRate = 1.0;
+                return;
+            }
+            
+            isPlaying = true;
+            const nextVideoUrl = videoQueue.shift(); 
+            
+            // Auto-speed up if queue gets too long
+            let currentSpeed = 1.0;
+            if (videoQueue.length > 5) { currentSpeed = 1.75; } 
+            else if (videoQueue.length > 2) { currentSpeed = 1.35; }
+
+            if (activePlayer === 1) {
+                player1.src = nextVideoUrl;
+                player1.playbackRate = currentSpeed;
+                player1.play();
+                player1.classList.add('active');
+                player2.classList.remove('active');
+                activePlayer = 2; 
+            } else {
+                player2.src = nextVideoUrl;
+                player2.playbackRate = currentSpeed;
+                player2.play();
+                player2.classList.add('active');
+                player1.classList.remove('active');
+                activePlayer = 1; 
+            }
+        }
+
+        player1.onended = playNextVideo;
+        player2.onended = playNextVideo;
+
+        // --- 3. SPEECH RECOGNITION LOGIC ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+            recognition.lang = 'hi-IN'; 
+            recognition.continuous = true; 
+            recognition.interimResults = true; 
+
+            recognition.onresult = (event) => {
+                let finalTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    }
+                }
+
+                if (finalTranscript) {
+                    let words = finalTranscript.toLowerCase().trim().split(/\s+/);
+                    let importantWords = words.filter(word => !stopWords.includes(word));
+                    filteredOutput.innerText = `[ ${importantWords.join(' ➔ ')} ]`;
+
+                    importantWords.forEach(word => {
+                        if (signDictionary[word]) {
+                            videoQueue.push(signDictionary[word]); 
+                        } else {
+                            let romanWord = transliterateHindi(word);
+                            for (let char of romanWord) {
+                                if (char.match(/[a-z]/i)) {
+                                    videoQueue.push(`./videos/${char}.mp4`); 
+                                }
+                            }
+                        }
+                    });
+
+                    if (!isPlaying && videoQueue.length > 0) { playNextVideo(); }
+                }
+            };
+
+            startBtn.addEventListener('click', () => {
+                recognition.start();
+                startBtn.innerText = "Listening... (Speak now)";
+                startBtn.style.background = "red";
+            });
+        }
+
+        // --- 4. PROJECTOR MODE LOGIC ---
+        const projectorBtn = document.getElementById('projector-btn');
+        const stage = document.querySelector('.stage');
+
+        projectorBtn.addEventListener('click', () => {
+            if (stage.requestFullscreen) { stage.requestFullscreen(); } 
+            else if (stage.webkitRequestFullscreen) { stage.webkitRequestFullscreen(); }
+        });
+    </script>
+</body>
+</html>
